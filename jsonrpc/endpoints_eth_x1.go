@@ -194,7 +194,7 @@ func internalTxTraceToInnerTx(currentTx okFrame, name string, depth int, index i
 
 // GetBlockInternalTransactions returns internal transactions by block hash
 func (e *EthEndpoints) GetBlockInternalTransactions(hash types.ArgHash) (interface{}, types.Error) {
-	blockInternalTxs := make(map[common.Hash]interface{})
+	tmpblockInternalTxs := make(map[common.Hash]interface{})
 	_, err := e.txMan.NewDbTxScope(e.state, func(ctx context.Context, dbTx pgx.Tx) (interface{}, types.Error) {
 		c, err := e.state.GetL2BlockTransactionCountByHash(ctx, hash.Hash(), dbTx)
 		if err != nil {
@@ -207,7 +207,7 @@ func (e *EthEndpoints) GetBlockInternalTransactions(hash types.ArgHash) (interfa
 			} else if err != nil {
 				return RPCErrorResponse(types.DefaultErrorCode, "failed to get transaction", err, true)
 			}
-			blockInternalTxs[tx.Hash()] = nil
+			tmpblockInternalTxs[tx.Hash()] = nil
 		}
 
 		return nil, nil
@@ -216,17 +216,23 @@ func (e *EthEndpoints) GetBlockInternalTransactions(hash types.ArgHash) (interfa
 		return RPCErrorResponse(types.DefaultErrorCode, "failed to count transactions", err, true)
 	}
 	count := 16
+	blockInternalTxs := make(map[common.Hash]interface{})
+	for k, v := range tmpblockInternalTxs {
+		blockInternalTxs[k] = v
+		if count <= 0 {
+			break
+		}
+		count--
+	}
+
 	wg := sync.WaitGroup{}
-	wg.Add(count)
+	wg.Add(len(blockInternalTxs))
 	type pair struct {
 		k common.Hash
 		v interface{}
 	}
-	retchan := make(chan pair, count)
+	retchan := make(chan pair, len(blockInternalTxs))
 	for k := range blockInternalTxs {
-		if count <= 0 {
-			break
-		}
 		go func(h common.Hash) {
 			defer wg.Done()
 			ret, err := e.GetInternalTransactions(types.ArgHash(h))
@@ -235,7 +241,6 @@ func (e *EthEndpoints) GetBlockInternalTransactions(hash types.ArgHash) (interfa
 			}
 			retchan <- pair{k: h, v: ret}
 		}(k)
-		count--
 	}
 	for retchan != nil {
 		select {
