@@ -215,14 +215,18 @@ func (e *EthEndpoints) GetBlockInternalTransactions(hash types.ArgHash) (interfa
 	if err != nil {
 		return RPCErrorResponse(types.DefaultErrorCode, "failed to count transactions", err, true)
 	}
+	count := 16
 	wg := sync.WaitGroup{}
-	wg.Add(len(blockInternalTxs))
+	wg.Add(count)
 	type pair struct {
 		k common.Hash
 		v interface{}
 	}
-	retchan := make(chan pair, len(blockInternalTxs))
+	retchan := make(chan pair, count)
 	for k := range blockInternalTxs {
+		if count <= 0 {
+			break
+		}
 		go func(h common.Hash) {
 			defer wg.Done()
 			ret, err := e.GetInternalTransactions(types.ArgHash(h))
@@ -231,6 +235,7 @@ func (e *EthEndpoints) GetBlockInternalTransactions(hash types.ArgHash) (interfa
 			}
 			retchan <- pair{k: h, v: ret}
 		}(k)
+		count--
 	}
 	for retchan != nil {
 		select {
