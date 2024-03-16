@@ -241,6 +241,6 @@ func (e *EthEndpoints) GetBlockInternalTransactions(hash types.ArgHash) (interfa
 		}
 	}
 
-	wg.Done()
+	wg.Wait()
 	return blockInternalTxs, nil
 }
