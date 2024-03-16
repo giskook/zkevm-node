@@ -242,14 +242,10 @@ func (e *EthEndpoints) GetBlockInternalTransactions(hash types.ArgHash) (interfa
 			retchan <- pair{k: h, v: ret}
 		}(k)
 	}
-	for retchan != nil {
-		select {
-		case r := <-retchan:
-			blockInternalTxs[r.k] = r.v
-		default:
-			retchan = nil
-		}
+	for r := range retchan {
+		blockInternalTxs[r.k] = r.v
 	}
+	close(retchan)
 
 	wg.Wait()
 	return blockInternalTxs, nil
