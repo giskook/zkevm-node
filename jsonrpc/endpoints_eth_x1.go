@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/0xPolygonHermez/zkevm-node/jsonrpc/types"
+	"github.com/0xPolygonHermez/zkevm-node/log"
 	"github.com/0xPolygonHermez/zkevm-node/state"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -214,12 +215,32 @@ func (e *EthEndpoints) GetBlockInternalTransactions(hash types.ArgHash) (interfa
 	if err != nil {
 		return RPCErrorResponse(types.DefaultErrorCode, "failed to count transactions", err, true)
 	}
-	for k := range blockInternalTxs {
-		ret, err := e.GetInternalTransactions(types.ArgHash(k))
-		if err != nil {
-			return RPCErrorResponse(types.DefaultErrorCode, "failed to get transaction", err, true)
-		}
-		blockInternalTxs[k] = ret
+	wg := sync.WaitGroup{}
+	wg.Add(len(blockInternalTxs))
+	type pair struct {
+		k common.Hash
+		v interface{}
 	}
+	retchan := make(chan pair, len(blockInternalTxs))
+	for k := range blockInternalTxs {
+		go func(h common.Hash) {
+			defer wg.Done()
+			ret, err := e.GetInternalTransactions(types.ArgHash(h))
+			if err != nil {
+				log.Error(err)
+			}
+			retchan <- pair{k: h, v: ret}
+		}(k)
+	}
+	for retchan != nil {
+		select {
+		case r := <-retchan:
+			blockInternalTxs[r.k] = r.v
+		default:
+			retchan = nil
+		}
+	}
+
+	wg.Done()
 	return blockInternalTxs, nil
 }
