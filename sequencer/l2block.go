@@ -523,6 +523,7 @@ func (f *finalizer) finalizeWIPL2Block(ctx context.Context) {
 	prevL1InfoTreeIndex := f.wipL2Block.l1InfoTreeExitRoot.L1InfoTreeIndex
 
 	f.closeWIPL2Block(ctx)
+	f.waitPendingL2BlockProcessed()
 
 	f.openNewWIPL2Block(ctx, prevTimestamp, &prevL1InfoTreeIndex)
 }
@@ -543,14 +544,7 @@ func (f *finalizer) closeWIPL2Block(ctx context.Context) {
 		// We update imStateRoot (used in tx-by-tx execution) to the finalStateRoot that has been updated after process the WIP L2 Block
 		f.wipBatch.imStateRoot = f.wipBatch.finalStateRoot
 	} else {
-		if f.pendingL2BlocksToProcessWG.Count() > 0 {
-			startWait := time.Now()
-			f.pendingL2BlocksToProcessWG.Wait()
-			waitTime := time.Since(startWait)
-			log.Debugf("waiting for previous L2 block to be processed took: %v", waitTime)
-			f.wipL2Block.metrics.waitl2BlockTime = waitTime
-		}
-
+		f.waitPendingL2BlockProcessed()
 		f.addPendingL2BlockToProcess(ctx, f.wipL2Block)
 
 		f.wipL2Block.metrics.close(f.wipL2Block.createdAt, int64(len(f.wipL2Block.transactions)), f.cfg.SequentialProcessL2Block)
@@ -774,5 +768,16 @@ func (f *finalizer) dumpL2Block(l2Block *L2Block) {
 		log.Infof("dump L2 block %d [%d] response, timestamp: %d, parentHash: %s, coinbase: %s, ger: %s, blockHashL1: %s, gasUsed: %d, blockInfoRoot: %s, blockHash: %s, counters: {used: %s, reserved: %s}\n%s",
 			blockResp.BlockNumber, l2Block.trackingNum, blockResp.Timestamp, blockResp.ParentHash, blockResp.Coinbase, blockResp.GlobalExitRoot, blockResp.BlockHashL1,
 			blockResp.GasUsed, blockResp.BlockInfoRoot, blockResp.BlockHash, f.logZKCounters(l2Block.batchResponse.UsedZkCounters), f.logZKCounters(l2Block.batchResponse.ReservedZkCounters), sLog)
+	}
+}
+
+func (f *finalizer) waitPendingL2BlockProcessed() {
+	if f.pendingL2BlocksToProcessWG.Count() > 0 {
+		startWait := time.Now()
+		f.pendingL2BlocksToProcessWG.Wait()
+		waitTime := time.Since(startWait)
+		if f.wipL2Block != nil {
+			f.wipL2Block.metrics.waitl2BlockTime = waitTime
+		}
 	}
 }
