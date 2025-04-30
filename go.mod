@@ -165,3 +165,5 @@ require (
 	github.com/prometheus/client_golang v1.17.0
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9
 )
+
+replace github.com/ethereum/go-ethereum => github.com/giskook/go-ethereum v0.0.0-20250430092033-9dbde53cdc1a
